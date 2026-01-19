@@ -1,0 +1,549 @@
+/CLEAR,START
+/PREP7
+/TITLE,Mechanism_with_rigid_bar_and_arc_bistable_beams
+
+! -------------------------------------------------
+! PARAMETERS (units: mm, N, N*mm)
+! -------------------------------------------------
+L_in_rigid     = 15.0      ! input rigid (vertical)
+L_between      = 57.5      ! second rigid (vertical)
+L_small_flex   = 10.0      ! first flexible (vertical)
+L_hor_left     = 218.0     ! long rigid: left from small_top
+L_hor_right    = 46.5      ! long rigid: right from small_top
+dist_left_flex = 137.5     ! offset to left vertical flex
+L_vert_flex    = 67.5      ! left vertical flex length
+L_right_flex   = 10.0      ! first angled flexible (BEAM188)
+L_rigid_after  = 50.2      ! rigid after 15 mm flex
+L_flex_after   = 10.0      ! last flexible in chain (to rigid bar)
+bar_height     = 10.0      ! distance between top and bottom of rigid bar
+bistable_offset = 5	   ! horzizontal distance between bistable elements
+bistable_flex  = 37.0	   ! bistable bar
+pre_load_dis   = 4.0       ! vertical envelope for each arc
+arc_W          = 4         ! horizontal envelope for each arc (bows right)
+angle_deg      = -15.0     ! ALL angled chain beams: -15° from +X (down-right)
+
+! thicknesses
+t_flex         = 0.10      ! normal flexible beams
+t_stiffer      = 0.30      ! The one flexure above the input
+t_out_of_plane = 10.0      ! out-of-plane thickness
+
+! material 
+E_STEEL   = 210000.0
+NU_STEEL  = 0.30
+RHO_STEEL = 7.85e-6
+
+! loading
+M_input = 60.0             ! N*mm torque at ground hinge
+DISP_H  = 1.0               ! mm horizontal displacement of bar middle node
+Y_PRE   = 4.0
+
+! -------------------------------------------------
+! MATERIAL & ELEMENT TYPES
+! -------------------------------------------------
+!Material 1: Steel
+MP,EX,1,E_STEEL
+MP,NUXY,1,NU_STEEL
+MP,DENS,1,RHO_STEEL
+
+! Material 2: Artificial Rigid Material 
+MP,EX,2,E_STEEL*1000  
+MP,NUXY,2,NU_STEEL
+MP,DENS,2,RHO_STEEL
+
+ET,1,BEAM188	! Flexible beams
+ET,2,BEAM188	! Rigid beams
+
+! Joint Element Type 
+ET,100, MPC184       ! Element type 100
+KEYOPT, 100, 1, 6    ! KEYOPT(1)=6 is for revolute joint
+KEYOPT, 100, 4, 1    ! Necessary for joint orientation 
+
+! Beam sections (for BEAM188 only)
+SECTYPE,1,BEAM,RECT          ! SECID 1: normal flex (0.10 mm)
+SECDATA,t_flex,t_out_of_plane
+
+SECTYPE,2,BEAM,RECT          ! SECID 2: The One (0.30 mm)
+SECDATA,t_stiffer,t_out_of_plane
+
+! Creating Local Coordinate System (ID 999) aligned with Global (0,0,0) for joint
+LOCAL, 999, 0, 0, 0, 0
+
+! Joint section
+SECTYPE,3,JOINT,REVO, HingeJoint  ! Section ID 1, Type Joint, Revolute
+SECDATA,999, , , , , 		  !999 tells joint to use right orientation...
+
+! Rigid Beam Section (Thick to ensure rigidity)
+SECTYPE,4,BEAM,RECT
+SECDATA, 5.0, t_out_of_plane  ! 5mm thick (much stiffer than 0.1mm flex)
+
+! -------------------------------------------------
+! NODES (2D: X–Y, Z=0)
+! -------------------------------------------------
+nnum = 1
+
+! 1: Ground pivot (revolute)
+K, nnum, 0, 0, 0
+n_pivot = nnum
+nnum = nnum+1     ! 2
+
+! 2: Input rigid top (15 mm up)
+K, nnum, 0, L_in_rigid, 0
+n_in_top = nnum
+nnum = nnum+1     ! 3
+
+! Extra keypoint at 2 for joint placement
+K, nnum, 0, L_in_rigid, 0
+n_in_top_ext = nnum
+nnum = nnum+1     ! 3
+
+! 3: Second rigid top (57.5 mm above previous)
+K, nnum, 0, L_in_rigid+L_between, 0
+n_second_top = nnum
+nnum = nnum+1     ! 4
+
+! 4: First flexible top (10 mm above previous)
+K, nnum, 0, L_in_rigid+L_between+L_small_flex, 0
+n_small_top = nnum
+nnum = nnum+1     ! 5
+
+y_top = L_in_rigid+L_between+L_small_flex
+
+! 5: Long horizontal rigid left end
+K, nnum, -L_hor_left, y_top, 0
+n_hor_left = nnum
+nnum = nnum+1     ! 6
+
+! 6: Long horizontal rigid right end
+K, nnum,  L_hor_right, y_top, 0
+n_hor_right = nnum
+nnum = nnum+1     ! 7
+
+! 7: Left vertical flex top (137.5 mm left of small_top)
+x_vert = -dist_left_flex
+K, nnum, x_vert, y_top, 0
+n_vleft_top = nnum
+nnum = nnum+1     ! 8
+
+! 8: Left vertical flex bottom (ground)
+K, nnum, x_vert, y_top-L_vert_flex, 0
+n_vleft_bot = nnum
+nnum = nnum+1     ! 9
+
+! Right-side chain 
+ang = 0
+x0 = L_hor_right
+y0 = y_top
+
+! 9: End of 15 mm angled flexible from n_hor_right
+x1 = x0 + L_right_flex*COS(ang)
+y1 = y0 + L_right_flex*SIN(ang)
+K, nnum, x1, y1, 0
+n_flex15_end = nnum
+nnum = nnum+1     ! 10
+
+! 10: End of 40.2 mm rigid colinear
+x2 = x1 + L_rigid_after*COS(ang)
+y2 = y1 + L_rigid_after*SIN(ang)
+K, nnum, x2, y2, 0
+n_rigid40_end = nnum
+nnum = nnum+1     ! 11
+
+! 11: Middle node of rigid bar (end of 17 mm flexible)
+x3 = x2 + L_flex_after*COS(ang)
+y3 = y2 + L_flex_after*SIN(ang)
+K, nnum, x3, y3, 0
+n_bar_mid = nnum
+nnum = nnum+1     ! 12
+
+! 12: Top node of rigid vertical bar (bar_height/2 above middle)
+K, nnum, x3, y3 + bar_height/2, 0
+n_bar_top = nnum
+nnum = nnum+1     ! 13
+
+! 13: Bottom node of rigid vertical bar (bar_height/2 below middle)
+K, nnum, x3, y3 - bar_height/2, 0
+n_bar_bot = nnum
+nnum = nnum+1     ! 14
+
+!EXTENTION for the rigid bistable block
+
+! 12: Top node of rigid vertical bar (bar_height/2 above middle)
+K, nnum, x3 + bistable_offset, y3 + bar_height/2, 0
+n_bar_top2 = nnum
+nnum = nnum+1     ! 15
+
+! 13: Bottom node of rigid vertical bar (bar_height/2 below middle)
+K, nnum, x3 + bistable_offset, y3 - bar_height/2, 0
+n_bar_bot2 = nnum
+nnum = nnum+1     ! 16
+
+
+! --------- Top arc (3 nodes, bows right) ----------
+! Start = n_bar_top
+top_x0 = x3
+top_y0 = y3 + bar_height/2
+
+14: top arc mid node (to the right & up)
+K, nnum, top_x0, top_y0 + bistable_flex/2, 0
+n_top_mid = nnum
+nnum = nnum+1     ! 17
+
+! 15: top bistable anchor (directly above start, fully constrained)
+K, nnum, top_x0, top_y0 + bistable_flex, 0
+n_top_anchor = nnum
+nnum = nnum+1     ! 18
+
+! --------- SECOND Top arc ----------
+
+!14: top arc mid node (to the right & up)
+K, nnum, top_x0 + bistable_offset, top_y0 + bistable_flex/2, 0
+n_top_mid2 = nnum
+nnum = nnum+1     ! 19
+
+! 15: top bistable anchor (directly above start, fully constrained)
+K, nnum, top_x0 + bistable_offset, top_y0 + bistable_flex, 0
+n_top_anchor2 = nnum
+nnum = nnum+1     ! 20
+
+! --------- Bottom arc (3 nodes, bows right) ----------
+! Start = n_bar_bot
+bot_x0 = x3
+bot_y0 = y3 - bar_height/2
+
+!16: bottom arc mid node (to the right & down)
+K, nnum, bot_x0, bot_y0 - bistable_flex/2, 0
+n_bot_mid = nnum
+nnum = nnum+1     ! 21
+
+! 17: bottom bistable anchor (directly below start, fully constrained)
+K, nnum, bot_x0, bot_y0 - bistable_flex, 0
+n_bot_anchor = nnum
+nnum = nnum+1     ! 22
+
+! --------- SECOND Bottom arc ---------
+
+16: bottom arc mid node (to the right & down)
+K, nnum, bot_x0 + bistable_offset, bot_y0 - bistable_flex/2, 0
+n_bot_mid2 = nnum
+nnum = nnum+1     ! 23
+
+! 17: bottom bistable anchor (directly below start, fully constrained)
+K, nnum, bot_x0 + bistable_offset, bot_y0 - bistable_flex, 0
+n_bot_anchor2 = nnum
+nnum = nnum+1     ! 24
+
+! ----------------------------------------------------------------------------------------
+! ELEMENTS
+! ----------------------------------------------------------------------------------------
+*GET,ID1,LINE,0,NUM,MAXD 
+	!Flexible lines with Cross-section 1 
+L, n_vleft_top, n_vleft_bot
+L, n_hor_right, n_flex15_end
+L, n_rigid40_end, n_bar_mid
+L, n_bar_top, n_top_mid
+L, n_top_mid, n_top_anchor
+L, n_bar_bot, n_bot_mid
+L, n_bot_mid, n_bot_anchor
+L, n_bar_top2, n_top_mid2
+L, n_top_mid2, n_top_anchor2
+L, n_bar_bot2, n_bot_mid2
+L, n_bot_mid2, n_bot_anchor2
+
+*GET,ID2,LINE,0,NUM,MAXD 
+	!Flexible lines with Cross-section 2 (One flexure)
+L, n_second_top, n_small_top
+
+*GET,ID3,LINE,0,NUM,MAXD
+	!Rigid lines
+L, n_pivot, n_in_top
+L, n_in_top_ext, n_second_top
+L, n_hor_left, n_vleft_top
+L, n_small_top, n_vleft_top
+L, n_small_top, n_hor_right
+L, n_flex15_end, n_rigid40_end
+L, n_bar_top, n_bar_mid
+L, n_bar_mid, n_bar_bot
+L, n_bar_top, n_bar_top2
+L, n_bar_bot, n_bar_bot2
+
+*GET,ID4,LINE,0,NUM,MAXD
+
+!Mesh lines
+
+TYPE,1
+SECNUM,1
+LSEL,S,LINE,,ID1+1,ID2
+LESIZE,ALL,,,20 !make all lines consist of 20 elements
+LMESH,ALL
+
+ALLSEL,ALL
+
+TYPE,1
+SECNUM,2
+LSEL,S,LINE,,ID2+1,ID3
+LESIZE,ALL,,,20 !make all lines consist of 20 elements
+LMESH,ALL
+
+ALLSEL,ALL
+
+TYPE, 2   !BEAM188
+MAT, 2	  !The stiffer fake material
+SECNUM, 4 !The thick section
+LSEL,S,LINE,,ID3+1,ID4
+LESIZE,ALL,,,1 !make all lines consist of 1 element
+LMESH,ALL
+MAT, 1 !apparently this is needed just to be safe
+
+ALLSEL, ALL
+
+! ---- Joint keypoints to protect ----
+KSEL,NONE
+KSEL,A,KP,,n_in_top
+KSEL,A,KP,,n_in_top_ext
+CM,JOINT_KP,KP
+ALLSEL,ALL
+! ---- Nodes belonging to joints ----
+KSEL,S,KP,,JOINT_KP
+NSLK,S
+CM,JOINT_NODES,NODE
+ALLSEL,ALL
+! ---- Merge while preserving joint nodes ----
+ALLSEL,ALL
+NSEL,U,KP,,JOINT_NODES
+SELTOL,1e-5   
+NUMMRG,NODE
+NUMMRG,ELEM
+
+ALLSEL,ALL
+/COM ---- Joint nodes after merge ----
+CMSEL,S,JOINT_NODES
+NLIST
+NPLOT
+ALLSEL,ALL
+
+! -------------------------------------------------
+! JOINT CREATION
+! -------------------------------------------------
+ALLSEL, ALL
+! Finding the node at the top of the input bar (Keypoint n_in_top)
+KSEL, S, KP, , n_in_top   ! Select the specific keypoint
+NSLK, S                   ! Select the node attached to this keypoint
+*GET, node_1, NODE, 0, NUM, MIN  ! Store this node number
+
+! Finding the node at the extension point (Keypoint n_in_top_ext) 
+KSEL, S, KP, , n_in_top_ext
+NSLK, S
+*GET, node_2, NODE, 0, NUM, MIN
+
+! Creating the Joint Element
+ALLSEL, ALL               
+TYPE, 100                 
+SECNUM, 3                 
+E, node_1, node_2         
+
+ALLSEL, ALL
+
+! Visual Settings
+/GRAPHICS, POWER
+/PLOTSTS, INFO, 0
+/PLOTSTS, DATE, 0
+/TRIAD, OFF
+
+! Constrain Out-of-Plane Motion (UZ, ROTX, ROTY) for all nodes.
+NSEL, ALL                   ! Select all nodes
+NSEL, U, NODE, , node_2     ! Unselect the moving node of the joint
+D, ALL, UZ, 0               ! Apply 2D flattening to everyone else
+D, ALL, ROTX, 0
+D, ALL, ROTY, 0
+ALLSEL, ALL
+
+! -------------------------------------------------
+! LOADS
+! -------------------------------------------------
+! -------------------------------------------------
+! LOADS AND TIME-EVOLUTION SOLVE
+! -------------------------------------------------
+/SOLU
+ANTYPE,STATIC          ! quasi-static, but with time-like load ramp
+NLGEOM,ON              ! large deformations
+KBC,0                  ! ramp loads between load steps
+OUTRES,ALL,ALL         ! store all results
+SOLCONTROL,ON,ON
+AUTOTS,ON
+NEQIT,30
+NSUBST,20,100,10       ! (initial, max, min) substeps per load step
+
+
+SOLVE
+TIME,1
+! -------------------------------------------------
+! BOUNDARY CONDITIONS
+! -------------------------------------------------
+! 1. Constraining Ground Points
+DK, n_pivot, UX, 0
+DK, n_pivot, UY, 0
+DK, n_pivot, UZ, 0
+DK, n_vleft_bot, ALL, 0
+DK, n_top_anchor, ALL, 0
+DK, n_bot_anchor, ALL, 0
+DK, n_top_anchor2, ALL, 0
+DK, n_bot_anchor2, ALL, 0
+
+! Removing Y-constrained for pre-loading
+DKDELE, n_top_anchor, UY
+DKDELE, n_top_anchor2, UY
+DKDELE, n_bot_anchor, UY
+DKDELE, n_bot_anchor2, UY 
+
+!Giving a little push in one direction ensuring that the flexures will bend when being pre-loaded
+DK, n_bot_mid, UX, 1
+DK, n_bot_mid2, UX, 1
+DK, n_top_mid, UX, 1
+DK, n_top_mid2, UX, 1
+DK, n_bar_mid, ALL, 0
+
+SOLVE
+
+TIME,2
+!(Updating apdl registry for pre-loading)
+
+!need the node here in order to prescribe the displacement in y-direction otherwise ansys gives errors
+KSEL,S,,,n_top_anchor			!select keypoint 
+NSLK,S					!select the node at keypoint 
+*GET,top_anchor,NODE,,NUM,MIN		!assign the ID: top_anchor to this node
+ALLSEL,ALL
+
+KBC,1				!apply load in a step
+*GET,DISP_top_anchor,NODE,top_anchor,U,Y
+DK,n_top_anchor,UY,DISP_top_anchor
+
+!need the node here in order to prescribe the displacement in y-direction otherwise ansys gives errors
+KSEL,S,,,n_top_anchor2			!select keypoint 
+NSLK,S					!select the node at keypoint 
+*GET,top_anchor2,NODE,,NUM,MIN		!assign the ID: top_anchor2 to this node
+ALLSEL,ALL
+
+KBC,1				!apply load in a step
+*GET,DISP_top_anchor2,NODE,top_anchor2,U,Y
+DK,n_top_anchor2,UY,DISP_top_anchor2
+
+!need the node here in order to prescribe the displacement in y-direction otherwise ansys gives errors
+KSEL,S,,,n_bot_anchor			!select keypoint 
+NSLK,S					!select the node at keypoint 
+*GET,bot_anchor,NODE,,NUM,MIN		!assign the ID: top_anchor to this node
+ALLSEL,ALL
+
+KBC,1				!apply load in a step
+*GET,DISP_bot_anchor,NODE,bot_anchor,U,Y
+DK,n_bot_anchor,UY,DISP_bot_anchor
+
+!need the node here in order to prescribe the displacement in y-direction otherwise ansys gives errors
+KSEL,S,,,n_bot_anchor2			!select keypoint 
+NSLK,S					!select the node at keypoint 
+*GET,bot_anchor2,NODE,,NUM,MIN		!assign the ID: top_anchor to this node
+ALLSEL,ALL
+
+KBC,1				!apply load in a step
+*GET,DISP_bot_anchor2,NODE,bot_anchor2,U,Y
+DK,n_bot_anchor2,UY,DISP_bot_anchor2
+
+SOLVE
+
+TIME,3
+
+! 1. Compress the anchors 
+KBC, 0
+DKDELE, n_top_mid, UX
+DKDELE, n_top_mid2, UX
+DKDELE, n_bot_mid, UX
+DKDELE, n_bot_mid2, UX
+
+DK, n_top_anchor, UY, -pre_load_dis
+DK, n_bot_anchor, UY,  pre_load_dis
+DK, n_top_anchor2, UY, -pre_load_dis
+DK, n_bot_anchor2, UY,  pre_load_dis
+
+SOLVE
+
+! -------------------------------------------------
+! TIME 2: RELEASE
+! -------------------------------------------------
+TIME,4
+NROPT,FULL
+NEQIT,60
+!Assuring the rotation is done in a lot of substeps, otherwise it will break
+NSUBST,200,5000,50
+KBC,0
+! Apply rotation to the Ground Pivot (Node 1)
+DK, n_pivot, ROTZ, 6.28  
+!Recording reaction forces at every step
+OUTRES,ALL,ALL
+!F, n_pivot, MZ, M_input !Adding a torque unfortunately doesn't work with a bistable mechanism.
+
+SOLVE
+
+FINISH
+
+
+! -------------------------------------------------
+! POSTPROCESS
+! -------------------------------------------------
+! -------------------------------------------------
+! POSTPROCESS: ANIMATE TIME EVOLUTION
+! -------------------------------------------------
+
+! -------------------------------------------------
+! POST26: displacement curve for leftmost horizontal node (node 5)
+! -------------------------------------------------
+/POST26
+
+! -------------------------------------------------
+! POST26: CORRECTED PLOTTING ORDER
+! -------------------------------------------------
+/POST26
+RESET
+NUMVAR, 10
+
+! Getting the pivot node for the Torque-Deflection graph
+NSEL, S, LOC, X, -0.01, 0.01   
+NSEL, R, LOC, Y, -0.01, 0.01   
+*GET, true_pivot_node, NODE, 0, NUM, MIN 
+ALLSEL, ALL
+
+! Defining variables and labels for plot
+NSOL, 2, true_pivot_node, ROT, Z, Rot_Rad        
+RFORCE, 3, true_pivot_node, M, Z, Torque_Nmm   
+TIMERANGE, 4, 5      ! Focus on the rotation phase
+XVAR, 2              ! Set X-Axis to Rotation (Var 2)
+/AXLAB, X, Rotation (rad)          
+/AXLAB, Y, Reaction Torque (Nmm)
+/GRID, 1
+
+/SHOW, WIN32       
+PLVAR, 3             ! Generating plot
+PRVAR, 2, 3
+
+SET,1,1                 ! first load step, first substep (t ~ 0)
+/GROPTS, VIEW, 1
+/EDGE,1
+/ESHAPE,1
+/DSCALE,DEFM,1          ! Assuring true scale in shown
+
+! Gray background
+/RGB,INDEX,100,100,100,0   
+/RGB,INDEX, 80, 80, 80,13   
+/RGB,INDEX, 60, 60, 60,14   
+/RGB,INDEX,  0,  0,  0,15  
+
+! Animate deformed shape over all substeps and both load steps
+/ANIM,DEFO
+ANDSCL
+
+/OUTPUT,results,txt
+SET,LAST
+PRNSOL,U,COMP
+PRNSOL,S,COMP
+/OUTPUT
+FINISH
+
+
